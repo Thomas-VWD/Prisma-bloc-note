@@ -1,12 +1,58 @@
 import { PrismaClient } from "@prisma/client";
 import express from "express";
+const cors = require("cors");
 
 const prisma = new PrismaClient();
 const app = express();
 
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  })
+);
 app.use(express.json());
 
 // ... users routes ... //
+
+app.post(`/users`, async (req, res) => {
+  const { name, email, password } = req.body;
+  try {
+    const result = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password,
+      },
+    });
+    res.json(result);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while creating the user" });
+  }
+});
+
+app.put("/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password } = req.body;
+  try {
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: Number(id),
+      },
+      data: {
+        name,
+        email,
+        password,
+      },
+    });
+    res.json(updatedUser);
+  } catch (error) {
+    res.status(500).json({
+      error: `An error occurred while updating the user with ID ${id}`,
+    });
+  }
+});
 
 app.post(`/signup`, async (req, res) => {
   const { name, email, password } = req.body;
