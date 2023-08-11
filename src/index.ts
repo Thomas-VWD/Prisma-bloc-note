@@ -1,149 +1,190 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import express from "express";
+const cors = require("cors");
 
 const prisma = new PrismaClient();
 const app = express();
 
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  })
+);
 app.use(express.json());
 
+// ... users routes ... //
+
+app.post(`/users`, async (req, res) => {
+  const { name, email, password } = req.body;
+  try {
+    const result = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password,
+      },
+    });
+    res.json(result);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while creating the user" });
+  }
+});
+
+app.put("/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password } = req.body;
+  try {
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: Number(id),
+      },
+      data: {
+        name,
+        email,
+        password,
+      },
+    });
+    res.json(updatedUser);
+  } catch (error) {
+    res.status(500).json({
+      error: `An error occurred while updating the user with ID ${id}`,
+    });
+  }
+});
+
 app.post(`/signup`, async (req, res) => {
-  const { name, email, password, posts } = req.body;
-
-  const postData = posts?.map((post: Prisma.PostCreateInput) => {
-    return { title: post?.title, content: post?.content };
-  });
-
+  const { name, email, password } = req.body;
   const result = await prisma.user.create({
     data: {
       name,
       email,
       password,
-      posts: {
-        create: postData,
-      },
     },
   });
   res.json(result);
 });
 
-app.post(`/post`, async (req, res) => {
-  const { title, content, authorEmail } = req.body;
-  const result = await prisma.post.create({
-    data: {
-      title,
-      content,
-      author: { connect: { email: authorEmail } },
-    },
-  });
-  res.json(result);
-});
-
-app.put("/post/:id/views", async (req, res) => {
+app.get("/user/:id", async (req, res) => {
   const { id } = req.params;
-
   try {
-    const post = await prisma.post.update({
-      where: { id: Number(id) },
-      data: {
-        viewCount: {
-          increment: 1,
-        },
-      },
-    });
-
-    res.json(post);
-  } catch (error) {
-    res.json({ error: `Post with ID ${id} does not exist in the database` });
-  }
-});
-
-app.put("/publish/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const postData = await prisma.post.findUnique({
-      where: { id: Number(id) },
-      select: {
-        published: true,
-      },
-    });
-
-    const updatedPost = await prisma.post.update({
-      where: { id: Number(id) || undefined },
-      data: { published: !postData?.published },
-    });
-    res.json(updatedPost);
-  } catch (error) {
-    res.json({ error: `Post with ID ${id} does not exist in the database` });
-  }
-});
-
-app.delete(`/post/:id`, async (req, res) => {
-  const { id } = req.params;
-  const post = await prisma.post.delete({
-    where: {
-      id: Number(id),
-    },
-  });
-  res.json(post);
-});
-
-app.get("/users", async (req, res) => {
-  const users = await prisma.user.findMany();
-  res.json(users);
-});
-
-app.get("/user/:id/drafts", async (req, res) => {
-  const { id } = req.params;
-
-  const drafts = await prisma.user
-    .findUnique({
+    const user = await prisma.user.findUnique({
       where: {
         id: Number(id),
       },
-    })
-    .posts({
-      where: { published: false },
     });
-
-  res.json(drafts);
+    if (!user) {
+      res.status(404).json({ error: `User with ID ${id} not found` });
+      return;
+    }
+    res.json(user);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while fetching the user" });
+  }
 });
 
-app.get(`/post/:id`, async (req, res) => {
-  const { id }: { id?: string } = req.params;
-
-  const post = await prisma.post.findUnique({
-    where: { id: Number(id) },
-  });
-  res.json(post);
+app.delete("/user/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const user = await prisma.user.delete({
+      where: {
+        id: Number(id),
+      },
+    });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({
+      error: `An error occurred while deleting the user with ID ${id}`,
+    });
+  }
 });
 
-app.get("/feed", async (req, res) => {
-  const { searchString, skip, take, orderBy } = req.query;
+// ... Note Routes ... //
 
-  const or: Prisma.PostWhereInput = searchString
-    ? {
-        OR: [
-          { title: { contains: searchString as string } },
-          { content: { contains: searchString as string } },
-        ],
-      }
-    : {};
+app.post(`/notes`, async (req, res) => {
+  const { title, content } = req.body;
+  try {
+    const result = await prisma.note.create({
+      data: {
+        title,
+        content,
+      },
+    });
+    res.json(result);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while creating the note" });
+  }
+});
 
-  const posts = await prisma.post.findMany({
-    where: {
-      published: true,
-      ...or,
-    },
-    include: { author: true },
-    take: Number(take) || undefined,
-    skip: Number(skip) || undefined,
-    orderBy: {
-      updatedAt: orderBy as Prisma.SortOrder,
-    },
-  });
+app.get(`/notes`, async (req, res) => {
+  try {
+    const notes = await prisma.note.findMany();
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred while fetching notes" });
+  }
+});
 
-  res.json(posts);
+app.get("/notes/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const note = await prisma.note.findUnique({
+      where: {
+        id: Number(id),
+      },
+    });
+    if (!note) {
+      res.status(404).json({ error: `Note with ID ${id} not found` });
+      return;
+    }
+    res.json(note);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while fetching the note" });
+  }
+});
+
+app.put("/notes/:id", async (req, res) => {
+  const { id } = req.params;
+  const { title, content } = req.body;
+  try {
+    const updatedNote = await prisma.note.update({
+      where: {
+        id: Number(id),
+      },
+      data: {
+        title,
+        content,
+      },
+    });
+    res.json(updatedNote);
+  } catch (error) {
+    res.status(500).json({
+      error: `An error occurred while updating the note with ID ${id}`,
+    });
+  }
+});
+
+app.delete("/notes/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deletedNote = await prisma.note.delete({
+      where: {
+        id: Number(id),
+      },
+    });
+    res.json(deletedNote);
+  } catch (error) {
+    res.status(500).json({
+      error: `An error occurred while deleting the note with ID ${id}`,
+    });
+  }
 });
 
 const server = app.listen(3000, () =>
