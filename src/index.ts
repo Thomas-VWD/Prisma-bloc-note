@@ -7,7 +7,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "https://bloc-note-by-tvwd-taupehumide.onrender.com/",
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
   })
 );
 app.use(express.json());
